@@ -2,8 +2,8 @@ const express = require('express')
 const path = require('path')
 const app = express()
 const port = process.env.PORT || 4000
-var cors = require('cors')
-var whitelist = ['http://localhost:4000', 'https://evans-portfolio.onrender.com, http://127.0.0.1:4000','https://portfolio-server-6sq5.onrender.com']
+var cors = require('cors')  
+var whitelist = [ 'https://evans-portfolio.onrender.com','https://portfolio-server-6sq5.onrender.com']
 
 var corsOptions = {
   origin: function (origin, callback) {
@@ -24,7 +24,7 @@ app.use(express.json())
 app.use(express.static(path.join(__dirname,'/public')))
 
 app.get('/Music', cors(corsOptions), function (req, res, next) {
-  res.json({msg: 'This is CORS-enabled for a whitelisted domain.'})
+  res.sendFile(path.join(__dirname,'public','spotify.json'))
 })
 
  
