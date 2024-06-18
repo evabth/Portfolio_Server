@@ -7,7 +7,7 @@ var whitelist = [ 'https://evans-portfolio.onrender.com','https://portfolio-serv
 
 var corsOptions = {
   origin: function (origin, callback) {
-    console.log(origin)
+
     if (whitelist.indexOf(origin) !== -1 || !origin) {
       callback(null, true)
     } else {
@@ -23,9 +23,7 @@ app.use(express.urlencoded({extended: false}))
 app.use(express.json())
 app.use(express.static(path.join(__dirname,'/public')))
 
-app.get('/Music', cors(corsOptions), function (req, res, next) {
-  res.sendFile(path.join(__dirname,'public','spotify.json'))
-})
+app.use('/Music', cors(corsOptions), require(path.join(__dirname,'routes','spotify')))
 
  
 app.get('/', (req, res) => {
