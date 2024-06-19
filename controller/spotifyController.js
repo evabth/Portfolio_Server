@@ -6,7 +6,7 @@ const path = require('path')
 
 
 
-var redirect_uri = "http://localhost:4000/Music/Login"
+var redirect_uri = "https://portfolio-server-6sq5.onrender.com/Music/Login"
  
 
 var client_id = process.env.CLIENT_ID; 
