@@ -23,7 +23,7 @@ app.use(express.urlencoded({extended: false}))
 app.use(express.json())
 app.use(express.static(path.join(__dirname,'/public')))
 
-app.use('/Music', cors(corsOptions), require(path.join(__dirname,'routes','spotify')))
+app.use('/Music', require(path.join(__dirname,'routes','spotify')))
 
  
 app.get('/', (req, res) => {
