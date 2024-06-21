@@ -7,6 +7,8 @@ const spotifyController = require(path.join(__dirname,'..','controller','spotify
 
 router.route('/Login')
     .get(spotifyController.authorize)
+router.route('/Info')
+    .get(spotifyController.getInfo)
 
 
 module.exports = router
