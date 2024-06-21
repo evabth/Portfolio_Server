@@ -6,7 +6,7 @@ const path = require('path')
 
 
 //remember to change to the server address
-var redirect_uri = "https://portfolio-server-6sq5.onrender.com/Music/Login"
+var redirect_uri = "http://localhost:4000/Music/Login"
  
 
 var client_id = process.env.CLIENT_ID; 
@@ -165,14 +165,14 @@ async function getInfo (req,res){
 
     try {
 
-        const tokenFilePath = path.join(__dirname,'..', 'token.json');
+        const tokenFilePath = 'token.json';
 
         const tokenJSON = await handleTokenFile(tokenFilePath);
 
         let { access_token, refresh_token } = tokenJSON;
 
-        topTrackData = await getTopTracks(access_token,refresh_token)
-        topArtistData = await getTopArtists(access_token,refresh_token)
+        let {spotifyResponse: topTrackData, access_token: updatedAccess_token, refresh_token: updatedRefresh_token} = await getTopTracks(access_token,refresh_token)
+        let {spotifyResponse: topArtistData} = await getTopArtists(updatedAccess_token,updatedRefresh_token)
 
         const simplifiedTrackData = topTrackData.map(track => ({
             name: track.name,
@@ -256,7 +256,9 @@ async function handleSpotifyResponse(response,access_token,refresh_token,request
         console.log(response.status)
         if ( response.status == 200 ){
 
-            resolve(response.data.items)
+            const spotifyResponse = response.data.items
+
+            resolve({spotifyResponse,access_token,refresh_token})
             
         }
         else if ( response.status == 401 ){
@@ -265,7 +267,7 @@ async function handleSpotifyResponse(response,access_token,refresh_token,request
                 await callAuthorizationApi(refreshAccessTokenBody(refresh_token));
 
                 // Read the updated token from the file
-                const tokenFilePath = path.join(__dirname,'..', 'token.json');
+                const tokenFilePath = 'token.json';
                 const data = await fs.promises.readFile(tokenFilePath);
                 const tokenJSON = JSON.parse(data);
 
@@ -273,8 +275,8 @@ async function handleSpotifyResponse(response,access_token,refresh_token,request
                 refresh_token = tokenJSON.refresh_token;
 
                 // Retry fetching the top tracks with the new access token
-                const newTopTracks = await requestCallback(access_token, refresh_token);
-                resolve(newTopTracks)
+                const {spotifyResponse} = await requestCallback(access_token, refresh_token);
+                resolve({spotifyResponse,access_token,refresh_token})
 
             }catch(error){
                 reject(error)
