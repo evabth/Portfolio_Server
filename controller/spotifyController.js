@@ -14,22 +14,10 @@ var client_secret = process.env.CLIENT_SECRET;
 
 let tokens = null
 
-let topTracks = null
-
-
 const AUTHORIZE = "https://accounts.spotify.com/authorize"
 const TOKEN = "https://accounts.spotify.com/api/token";
-const PLAYLISTS = "https://api.spotify.com/v1/me/playlists";
-const DEVICES = "https://api.spotify.com/v1/me/player/devices";
-const PLAY = "https://api.spotify.com/v1/me/player/play";
-const PAUSE = "https://api.spotify.com/v1/me/player/pause";
-const NEXT = "https://api.spotify.com/v1/me/player/next";
-const PREVIOUS = "https://api.spotify.com/v1/me/player/previous";
-const PLAYER = "https://api.spotify.com/v1/me/player";
-const TRACKS = "https://api.spotify.com/v1/playlists/{{PlaylistId}}/tracks";
-const CURRENTLYPLAYING = "https://api.spotify.com/v1/me/player/currently-playing";
-const SHUFFLE = "https://api.spotify.com/v1/me/player/shuffle";
-const TOPTRACKS = "https://api.spotify.com/v1/me/top/tracks?limit=14"
+const TOPTRACKS = "https://api.spotify.com/v1/me/top/tracks?time_range=short_term&limit=14"
+const TOPARTISTS = "https://api.spotify.com/v1/me/top/artists?time_range=short_term&limit=14"
 
 
 
@@ -181,20 +169,26 @@ async function getInfo (req,res){
 
         const tokenJSON = await handleTokenFile(tokenFilePath);
 
-        let access_token = tokenJSON.access_token;
-        let refresh_token = tokenJSON.refresh_token;
+        let { access_token, refresh_token } = tokenJSON;
 
-        topTrackData = await requestInfo(access_token,refresh_token)
+        topTrackData = await getTopTracks(access_token,refresh_token)
+        topArtistData = await getTopArtists(access_token,refresh_token)
 
-        let i = 0
+        const simplifiedTrackData = topTrackData.map(track => ({
+            name: track.name,
+            imageUrl: track.album.images[0].url
+        }));
+        const simplifiedArtistData = topArtistData.map(Artist => ({
+            name: Artist.name,
+            imageUrl: Artist.images[0].url
+        }));
 
-        while(i < topTrackData.length){
-            console.log(topTrackData[i].name)
-            console.log(topTrackData[i].album.images[0].url)
-            i++
-        }
 
-        res.json(topTrackData)
+
+        res.json({
+            TopArtists:simplifiedArtistData,
+            TopTracks: simplifiedTrackData
+        })
 
     } catch(error) {
         console.error(error)
@@ -203,13 +197,9 @@ async function getInfo (req,res){
 
 }
 
-async function requestInfo (access_token,refresh_token){
-    console.log("info is being requested")
-    return  await getTopTracks(access_token,refresh_token)
 
-}
 //need to add access_token here and refresh token 
-async function callApi(method, url, body, callback, access_token, refresh_token) {
+async function callApi(method, url, body, access_token, refresh_token) {
     console.log("api getting called")
     try {
         const response = await axios({
@@ -232,12 +222,12 @@ async function callApi(method, url, body, callback, access_token, refresh_token)
 async function getTopTracks(access_token,refresh_token) {
     console.log("getting top tracks")
     if (access_token && refresh_token) {
-        const {response, error} = await callApi("GET", TOPTRACKS, null, handleTopTracks,access_token,refresh_token)
+        const {response, error} = await callApi("GET", TOPTRACKS, null, access_token,refresh_token)
 
         if (error) {
-            return handleTopTracks(error, access_token,refresh_token)
+            return handleSpotifyResponse(error, access_token,refresh_token,getTopTracks)
         }else{
-            return handleTopTracks(response,access_token,refresh_token)
+            return handleSpotifyResponse(response,access_token,refresh_token,getTopTracks)
         }
 
     }else{
@@ -245,7 +235,23 @@ async function getTopTracks(access_token,refresh_token) {
     }
 }
 
-async function handleTopTracks(response,access_token,refresh_token){
+async function getTopArtists(access_token,refresh_token) {
+    console.log("getting top Artists")
+    if (access_token && refresh_token) {
+        const {response, error} = await callApi("GET", TOPARTISTS, null,access_token,refresh_token)
+
+        if (error) {
+            return handleSpotifyResponse(error, access_token,refresh_token,getTopArtists)
+        }else{
+            return handleSpotifyResponse(response,access_token,refresh_token,getTopArtists)
+        }
+
+    }else{
+        throw new Error("Cannot get top tracks, access token or refresh token undefined");
+    }
+}
+
+async function handleSpotifyResponse(response,access_token,refresh_token,requestCallback){
     return new Promise (async (resolve, reject) => {
         console.log(response.status)
         if ( response.status == 200 ){
@@ -267,7 +273,7 @@ async function handleTopTracks(response,access_token,refresh_token){
                 refresh_token = tokenJSON.refresh_token;
 
                 // Retry fetching the top tracks with the new access token
-                const newTopTracks = await getTopTracks(access_token, refresh_token);
+                const newTopTracks = await requestCallback(access_token, refresh_token);
                 resolve(newTopTracks)
 
             }catch(error){
