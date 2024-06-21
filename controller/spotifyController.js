@@ -5,14 +5,16 @@ const axios = require('axios')
 const path = require('path')
 
 
-
-var redirect_uri = "https://portfolio-server-6sq5.onrender.com/Music/Login"
+//remember to change to the server address
+var redirect_uri = "http://localhost:4000/Music/Login"
  
 
 var client_id = process.env.CLIENT_ID; 
 var client_secret = process.env.CLIENT_SECRET;
 
 let tokens = null
+
+let topTracks = null
 
 
 const AUTHORIZE = "https://accounts.spotify.com/authorize"
@@ -27,30 +29,21 @@ const PLAYER = "https://api.spotify.com/v1/me/player";
 const TRACKS = "https://api.spotify.com/v1/playlists/{{PlaylistId}}/tracks";
 const CURRENTLYPLAYING = "https://api.spotify.com/v1/me/player/currently-playing";
 const SHUFFLE = "https://api.spotify.com/v1/me/player/shuffle";
+const TOPTRACKS = "https://api.spotify.com/v1/me/top/tracks?limit=14"
 
 
 
 const authorize = (req,res) => {
 
-    if (req.url.length > 1){
-        if (req.query.code){
-            fetchAccessToken(req.query.code);
-            res.sendFile(path.join(__dirname,'..','public','spotify.json'))
-        }else if (req.query.key == process.env.LOGIN_KEY){
-            requestAuthorization(req,res)
-        }else {
-            res.status(404).sendFile(path.join(__dirname,'views','404.html'))
-        }
-
-    }else{
-        res.status(404).sendFile(path.join(__dirname,'views','404.html'))
-        
-
+    if (req.query.code){
+        fetchAccessToken(req.query.code);
+        res.sendFile(path.join(__dirname,'..','public','spotify.json'))
+    }else if (req.query.key == process.env.LOGIN_KEY){
+        requestAuthorization(req,res)
+    }else {
+        res.status(404).sendFile(path.join(__dirname,'..','views','404.html'))
     }
 
-
-    
-    console.log(req.url.length)
     console.log("music request fufilled")
 }
 
@@ -63,7 +56,7 @@ function requestAuthorization(req,res){
     url += "&response_type=code";
     url += "&redirect_uri=" + encodeURI(redirect_uri);
     url += "&show_dialog=false";
-    url += "&scope=user-read-private user-read-email user-modify-playback-state user-read-playback-position user-library-read streaming user-read-playback-state user-read-recently-played playlist-read-private";
+    url += "&scope=user-read-private user-read-email user-modify-playback-state user-read-playback-position user-library-read streaming user-read-playback-state user-read-recently-played playlist-read-private user-top-read";
     console.log("right before redirect")
     res.redirect(url); // Show Spotify's authorization screen
 }
@@ -78,7 +71,7 @@ function fetchAccessToken(code){
     callAuthorizationApi(body);
 }
 
-function callAuthorizationApi(body){
+async function callAuthorizationApi(body){
     const authHeader = {
         Authorization: 'Basic ' + Buffer.from(`${client_id}:${client_secret}`).toString('base64'),
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -87,8 +80,8 @@ function callAuthorizationApi(body){
     return axios.post(TOKEN, body, {
         headers: authHeader
     })
-    .then(response => {
-        handleAuthorizationResponse(response);
+    .then(async response => {
+        await handleAuthorizationResponse(response);
     })
     .catch(error => {
         console.error('Error calling authorization API:', error);
@@ -97,14 +90,16 @@ function callAuthorizationApi(body){
 }
 
 
-function handleAuthorizationResponse(response){
+async function handleAuthorizationResponse(response){
+    console.log("handle Auth called")
     if (response.status == 200){
 
         console.log(response.data);
         var data = response.data;
+        const filePath = "token.json"
         if ( data.access_token && data.refresh_token){
 
-            const filePath = "token.json"
+            
             tokens = {
                 access_token : data.access_token,
                 refresh_token : data.refresh_token,
@@ -117,10 +112,36 @@ function handleAuthorizationResponse(response){
                 if (err) {
                     console.error('Error writing JSON to file:', err);
                 } else {
-                    console.log('JSON data written to file successfully');
+                    console.log('JSON data written to file successfully 1');
                 }
             });
-            
+
+        }else if (data.access_token){
+            try {
+                let fileContents = await fs.promises.readFile(filePath); // Read file asynchronously
+
+                let tokens = JSON.parse(fileContents)
+
+                tokens.access_token = data.access_token
+
+                const tokensString = JSON.stringify(tokens, null, 2);
+
+                fs.writeFile(filePath, tokensString, (err) => {
+                    if (err) {
+                        console.error('Error writing JSON to file:', err);
+                    } else {
+                        console.log('JSON data written to file successfully 2');
+                    }
+                });
+                
+                console.log("refresh of access token written")
+        
+            } catch (err) {
+                throw new Error(`Error reading/parsing JSON file: ${err.message}`);
+        
+            }
+
+
 
         }
     }
@@ -130,5 +151,136 @@ function handleAuthorizationResponse(response){
     }
 }
 
+function refreshAccessTokenBody(refresh_token){
+    let body = "grant_type=refresh_token";
+    body += "&refresh_token=" + refresh_token;
+    body += "&client_id=" + client_id;
+    return body
+}
 
-module.exports = {authorize}
+async function handleTokenFile(tokenFilePath) {
+    try {
+        const data = await fs.promises.readFile(tokenFilePath); // Read file asynchronously
+        const tokenJSON = JSON.parse(data.toString())
+        return tokenJSON
+
+    } catch (err) {
+        throw new Error(`Error reading/parsing JSON file: ${err.message}`);
+
+    }
+}
+
+
+async function getInfo (req,res){
+
+    console.log("getting info")
+
+    try {
+
+        const tokenFilePath = path.join(__dirname,'..', 'token.json');
+
+        const tokenJSON = await handleTokenFile(tokenFilePath);
+
+        let access_token = tokenJSON.access_token;
+        let refresh_token = tokenJSON.refresh_token;
+
+        topTrackData = await requestInfo(access_token,refresh_token)
+
+        let i = 0
+
+        while(i < topTrackData.length){
+            console.log(topTrackData[i].name)
+            console.log(topTrackData[i].album.images[0].url)
+            i++
+        }
+
+        res.json(topTrackData)
+
+    } catch(error) {
+        console.error(error)
+        res.status(500).send('Internal Server Error')
+    }
+
+}
+
+async function requestInfo (access_token,refresh_token){
+    console.log("info is being requested")
+    return  await getTopTracks(access_token,refresh_token)
+
+}
+//need to add access_token here and refresh token 
+async function callApi(method, url, body, callback, access_token, refresh_token) {
+    console.log("api getting called")
+    try {
+        const response = await axios({
+            method: method,
+            url: url,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + access_token
+            }
+        });
+        console.log("API call successful");
+        return { response};
+    } catch (error) {
+        console.error('Error making API call:', error.message);
+        return { error: error.response};
+    }
+}
+
+
+async function getTopTracks(access_token,refresh_token) {
+    console.log("getting top tracks")
+    if (access_token && refresh_token) {
+        const {response, error} = await callApi("GET", TOPTRACKS, null, handleTopTracks,access_token,refresh_token)
+
+        if (error) {
+            return handleTopTracks(error, access_token,refresh_token)
+        }else{
+            return handleTopTracks(response,access_token,refresh_token)
+        }
+
+    }else{
+        throw new Error("Cannot get top tracks, access token or refresh token undefined");
+    }
+}
+
+async function handleTopTracks(response,access_token,refresh_token){
+    return new Promise (async (resolve, reject) => {
+        console.log(response.status)
+        if ( response.status == 200 ){
+
+            resolve(response.data.items)
+            
+        }
+        else if ( response.status == 401 ){
+            console.log("getting new access token")
+            try {
+                await callAuthorizationApi(refreshAccessTokenBody(refresh_token));
+
+                // Read the updated token from the file
+                const tokenFilePath = path.join(__dirname,'..', 'token.json');
+                const data = await fs.promises.readFile(tokenFilePath);
+                const tokenJSON = JSON.parse(data);
+
+                access_token = tokenJSON.access_token;
+                refresh_token = tokenJSON.refresh_token;
+
+                // Retry fetching the top tracks with the new access token
+                const newTopTracks = await getTopTracks(access_token, refresh_token);
+                resolve(newTopTracks)
+
+            }catch(error){
+                reject(error)
+            }
+
+        }
+        else {
+            reject(new Error(`Unexpected response status: ${response.status}`));
+        }
+    })
+}
+
+
+
+module.exports = {authorize,getInfo}
